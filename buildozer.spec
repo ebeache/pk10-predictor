@@ -19,7 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas,json
 version = 1.0
 
 # 应用需求（Python包）- 移除torch和torchvision
-requirements = python3,kivy,numpy,scipy,requests,certifi
+requirements = python3,kivy,numpy,requests,certifi
 
 # 禁用SDL2_image的额外格式支持
 p4a.bootstrap = sdl2
