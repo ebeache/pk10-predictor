@@ -76,7 +76,8 @@ jobs:
         buildozer android debug
 
     - name: Upload APK
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pk10-predictor-apk
         path: bin/*.apk
+
