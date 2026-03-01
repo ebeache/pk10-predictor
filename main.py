@@ -44,13 +44,8 @@
 import json
 import requests
 from collections import Counter, defaultdict
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.uix.scrollview import ScrollView
-from kivy.clock import Clock
-from kivy.core.window import Window
+import tkinter as tk
+from tkinter import ttk, scrolledtext
 import threading
 import urllib3
 import statistics
@@ -177,262 +172,7 @@ class SequenceDataset(Dataset):
         return sequence, target[0]
 
 
-
-class PK10App(App):
-    """Android移动端应用 - 简化界面版"""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # 复制原PredictionApp的所有初始化变量
-        self.current_position = None
-        self.current_predictions = None
-        self.last_validation_result = None
-        self.last_predicted_issue = None
-        self.waiting_for_result = False
-        self.last_prediction = None
-        self.backtest_results = None
-        self.prediction_history = []
-        self.all_positions_backtest = {}
-        self.all_positions_predictions = {}
-        self.recommendation_history = []
-        self.last_recommended_position = None
-
-        self.stats_level1_count = 0
-        self.stats_level2_count = 0
-        self.stats_level3_count = 0
-        self.stats_level4_count = 0
-        self.stats_consecutive_2_miss = 0
-        self.stats_consecutive_3_miss = 0
-
-        self.device = torch.device('cpu')
-        self.lstm_models = {}
-        self.models_trained = False
-        self.preloaded_data = None
-        self.pretraining_in_progress = False
-
-        self.model_save_dir = "lstm_models"
-        if not os.path.exists(self.model_save_dir):
-            os.makedirs(self.model_save_dir)
-
-        self.history_text = ""
-        self.is_running = False
-
-    def build(self):
-        """构建简化的移动端界面"""
-        Window.clearcolor = (0.95, 0.95, 0.95, 1)
-
-        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-
-        # 按钮区域
-        btn_layout = BoxLayout(orientation='vertical', size_hint_y=0.35, spacing=8)
-
-        self.predict_btn = Button(
-            text='开始预测',
-            size_hint_y=None,
-            height=60,
-            background_color=(0.2, 0.6, 1, 1),
-            color=(1, 1, 1, 1),
-            font_size='20sp',
-            bold=True
-        )
-        self.predict_btn.bind(on_press=self.start_prediction)
-
-        self.train_btn = Button(
-            text='重新训练模型',
-            size_hint_y=None,
-            height=60,
-            background_color=(0.2, 0.8, 0.4, 1),
-            color=(1, 1, 1, 1),
-            font_size='20sp',
-            bold=True
-        )
-        self.train_btn.bind(on_press=self.retrain_models)
-
-        self.delete_btn = Button(
-            text='删除所有模型',
-            size_hint_y=None,
-            height=60,
-            background_color=(1, 0.4, 0.2, 1),
-            color=(1, 1, 1, 1),
-            font_size='20sp',
-            bold=True
-        )
-        self.delete_btn.bind(on_press=self.delete_models)
-
-        self.clear_btn = Button(
-            text='清除历史记录',
-            size_hint_y=None,
-            height=60,
-            background_color=(0.8, 0.6, 0.2, 1),
-            color=(1, 1, 1, 1),
-            font_size='20sp',
-            bold=True
-        )
-        self.clear_btn.bind(on_press=self.clear_history)
-
-        btn_layout.add_widget(self.predict_btn)
-        btn_layout.add_widget(self.train_btn)
-        btn_layout.add_widget(self.delete_btn)
-        btn_layout.add_widget(self.clear_btn)
-
-        # 历史记录标题
-        history_title = Label(
-            text='推荐历史记录',
-            size_hint_y=None,
-            height=40,
-            color=(0, 0, 0, 1),
-            bold=True,
-            font_size='22sp'
-        )
-
-        # 历史记录滚动区域
-        scroll = ScrollView(size_hint=(1, 0.65))
-        self.history_label = Label(
-            text='暂无历史记录\n\n点击"开始预测"获取推荐',
-            size_hint_y=None,
-            color=(0, 0, 0, 1),
-            halign='left',
-            valign='top',
-            font_size='16sp',
-            padding=(15, 15)
-        )
-        self.history_label.bind(texture_size=self.history_label.setter('size'))
-        scroll.add_widget(self.history_label)
-
-        layout.add_widget(btn_layout)
-        layout.add_widget(history_title)
-        layout.add_widget(scroll)
-
-        # 启动后台训练
-        Clock.schedule_once(lambda dt: self.preload_and_train_async(), 1)
-
-        return layout
-
-    def preload_and_train_async(self):
-        """后台预训练模型"""
-        import threading
-        threading.Thread(target=self.preload_and_train, daemon=True).start()
-
-    def start_prediction(self, instance):
-        """开始预测"""
-        if self.is_running:
-            return
-
-        self.is_running = True
-        self.predict_btn.text = '预测中...'
-        self.predict_btn.disabled = True
-
-        import threading
-        threading.Thread(target=self._do_prediction, daemon=True).start()
-
-    def _do_prediction(self):
-        """执行预测（后台线程）"""
-        try:
-            # 调用原系统的预测逻辑
-            self.run_all_predictions()
-            Clock.schedule_once(lambda dt: self._prediction_done())
-        except Exception as e:
-            Clock.schedule_once(lambda dt: self._prediction_error(str(e)))
-
-    def _prediction_done(self):
-        """预测完成"""
-        self.predict_btn.text = '开始预测'
-        self.predict_btn.disabled = False
-        self.is_running = False
-        self.update_history_display()
-
-    def _prediction_error(self, error):
-        """预测失败"""
-        self.predict_btn.text = '开始预测'
-        self.predict_btn.disabled = False
-        self.is_running = False
-        self.history_label.text = f'预测失败: {error}'
-
-    def retrain_models(self, instance):
-        """重新训练模型"""
-        self.train_btn.text = '训练中...'
-        self.train_btn.disabled = True
-        import threading
-        threading.Thread(target=self._do_training, daemon=True).start()
-
-    def _do_training(self):
-        """执行训练"""
-        try:
-            self.retrain_all_models()
-            Clock.schedule_once(lambda dt: self._training_done())
-        except:
-            Clock.schedule_once(lambda dt: self._training_error())
-
-    def _training_done(self):
-        """训练完成"""
-        self.train_btn.text = '重新训练模型'
-        self.train_btn.disabled = False
-        self.history_label.text = '模型训练完成！'
-
-    def _training_error(self):
-        """训练失败"""
-        self.train_btn.text = '重新训练模型'
-        self.train_btn.disabled = False
-        self.history_label.text = '模型训练失败！'
-
-    def delete_models(self, instance):
-        """删除所有模型"""
-        try:
-            self.delete_all_models()
-            self.history_label.text = '所有模型已删除！'
-        except Exception as e:
-            self.history_label.text = f'删除失败: {e}'
-
-    def clear_history(self, instance):
-        """清除历史记录"""
-        self.recommendation_history = []
-        self.update_history_display()
-
-    def update_history_display(self):
-        """更新历史记录显示"""
-        if not self.recommendation_history:
-            self.history_label.text = '暂无历史记录\n\n点击"开始预测"获取推荐'
-            return
-
-        text = ''
-        for i, record in enumerate(reversed(self.recommendation_history[-30:]), 1):
-            text += f"\n{'='*40}\n"
-            text += f"记录 #{i}\n"
-            text += f"期号: {record.get('issue', '--')}\n"
-            text += f"名次: 第{record.get('position', '--')}名\n"
-            nums = record.get('numbers', [])
-            text += f"推荐号码: {', '.join(map(str, nums[:8]))}\n"
-            result = record.get('result', 'waiting')
-            if result == 'waiting':
-                text += f"结果: [等待开奖]\n"
-            elif result.startswith('TOP'):
-                text += f"结果: ✓ {result}\n"
-            else:
-                text += f"结果: ✗ 未中\n"
-
-        self.history_label.text = text
-
-    def log(self, message, color=None):
-        """日志输出（移动端简化版）"""
-        print(message)
-
-    def log_backtest(self, position, message, color=None):
-        """回测日志（移动端简化版）"""
-        print(f"[第{position}名] {message}")
-
-    def update_status(self, message):
-        """更新状态"""
-        print(f"[状态] {message}")
-
-    def clear_console(self):
-        """清空控制台（移动端无操作）"""
-        pass
-
-    def clear_backtest_console(self, position=None):
-        """清空回测控制台（移动端无操作）"""
-        pass
-
-
+class PredictionApp:
     def __init__(self, root):
         self.root = root
         self.root.title("深度学习预测系统 - TOP8多策略优化版 (动态权重 + 5策略融合)")
@@ -486,7 +226,127 @@ class PK10App(App):
         self.update_status("正在后台预训练LSTM深度学习模型...")
         threading.Thread(target=self.preload_and_train, daemon=True).start()
 
+    def setup_ui(self):
+        # 主容器
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.rowconfigure(3, weight=1)
+        main_frame.columnconfigure(0, weight=0, minsize=350)  # 左侧预测结果栏（固定宽度）
+        main_frame.columnconfigure(1, weight=1)  # 中间回测详情栏（自适应扩展）
+        main_frame.columnconfigure(2, weight=0, minsize=380)  # 右侧历史记录栏（固定宽度，始终显示）
 
+        # 顶部信息区域（两行显示）
+        info_frame = ttk.LabelFrame(main_frame, text="当前信息", padding="10")
+        info_frame.grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        info_frame.columnconfigure(0, weight=1)
+
+        # 第一行：最新期号和号码
+        self.info_label_line1 = ttk.Label(info_frame, text="最新期号: -- | 最新号码: --",
+                                          font=("Consolas", 10))
+        self.info_label_line1.grid(row=0, column=0, sticky=(tk.W, tk.E))
+
+        # 第二行：预测期号、推荐名次、推荐号码
+        self.info_label_line2 = ttk.Label(info_frame, text="预测期号: -- | 推荐名次: -- | 推荐号码: --",
+                                          font=("Consolas", 10), foreground="blue")
+        self.info_label_line2.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+
+        # 第三行：推荐策略和近期表现
+        self.info_label_line3 = ttk.Label(info_frame, text="推荐策略: -- | 近1期表现: --",
+                                          font=("Consolas", 10), foreground="green")
+        self.info_label_line3.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+
+        # 第四行：模型验证信息
+        self.info_label_line4 = ttk.Label(info_frame, text="模型验证: 等待验证 | 预测期号: -- | 预测号码: --",
+                                          font=("Consolas", 10), foreground="purple")
+        self.info_label_line4.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+
+        # 控制按钮区域
+        control_frame = ttk.Frame(main_frame)
+        control_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+
+        # 第一行按钮：主要功能
+        self.run_button = ttk.Button(control_frame, text="[目标] 开始运行", command=self.start_prediction)
+        self.run_button.grid(row=0, column=0, padx=5)
+
+        self.status_label = ttk.Label(control_frame, text="就绪", foreground="green")
+        self.status_label.grid(row=0, column=1, padx=5)
+
+        # 第二行按钮：高级功能
+        ttk.Label(control_frame, text="高级功能:", font=("Arial", 9, "bold")).grid(row=1, column=0, sticky=tk.W, pady=(10, 5))
+
+        self.history_button = ttk.Button(control_frame, text="📜 历史记录", command=self.show_recommendation_history)
+        self.history_button.grid(row=2, column=0, padx=5, pady=2, sticky=tk.W)
+
+        # 第三行按钮：模型管理功能
+        self.retrain_model_button = ttk.Button(control_frame, text="🔄 重新训练模型", command=self.retrain_all_models)
+        self.retrain_model_button.grid(row=3, column=0, padx=5, pady=2, sticky=tk.W)
+
+        self.delete_models_button = ttk.Button(control_frame, text="🗑️ 删除所有模型", command=self.delete_all_models)
+        self.delete_models_button.grid(row=3, column=1, padx=5, pady=2, sticky=tk.W)
+
+        # 进度条
+        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
+        self.progress.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+
+        # 左侧：预测结果控制台（更窄）
+        console_frame = ttk.LabelFrame(main_frame, text="预测结果（1-10名）", padding="10")
+        console_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        console_frame.rowconfigure(0, weight=1)
+        console_frame.columnconfigure(0, weight=1)
+
+        self.console = scrolledtext.ScrolledText(console_frame, wrap=tk.WORD,
+                                                  font=("Consolas", 9),
+                                                  bg="#1e1e1e", fg="#d4d4d4",
+                                                  width=35)  # 固定宽度
+        self.console.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # 中间：10个回测详情框（分5列显示，每列2个）
+        backtest_main_frame = ttk.LabelFrame(main_frame, text="回测详情（1-10名）", padding="10")
+        backtest_main_frame.grid(row=3, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 5))
+        backtest_main_frame.rowconfigure(0, weight=1)
+        backtest_main_frame.columnconfigure(0, weight=1)
+
+        # 创建Canvas和Scrollbar
+        self.backtest_canvas = tk.Canvas(backtest_main_frame, bg="#1e1e1e", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(backtest_main_frame, orient="vertical", command=self.backtest_canvas.yview)
+        scrollable_frame = ttk.Frame(self.backtest_canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.backtest_canvas.configure(scrollregion=self.backtest_canvas.bbox("all"))
+        )
+
+        self.backtest_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        self.backtest_canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.backtest_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+
+        # 配置scrollable_frame的列权重（1列布局）
+        scrollable_frame.columnconfigure(0, weight=1)
+
+        # 配置行权重（10行布局）
+        for row in range(10):
+            scrollable_frame.rowconfigure(row, weight=1)
+
+        # 创建10个回测详情文本框（1列布局，1-10名）
+        self.backtest_consoles = {}
+        for position in range(1, 11):
+            # 每个名次的框架
+            pos_frame = ttk.LabelFrame(scrollable_frame, text=f"第{position}名", padding="5")
+            pos_frame.grid(row=position-1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=5)
+            pos_frame.columnconfigure(0, weight=1)
+            pos_frame.rowconfigure(0, weight=1)
+
+            # 文本框（1列布局，自适应宽度，字体清晰）
+            text_widget = scrolledtext.ScrolledText(pos_frame, wrap=tk.WORD,
+                                                     font=("Consolas", 9),
+                                                     bg="#1e1e1e", fg="#d4d4d4",
+                                                     height=12)
+            text_widget.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            self.backtest_consoles[position] = text_widget
+
+        # 绑定鼠标滚轮事件
         def _on_mousewheel(event):
             self.backtest_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         self.backtest_canvas.bind_all("<MouseWheel>", _on_mousewheel)
@@ -537,6 +397,104 @@ class PK10App(App):
         self.history_tree.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         history_scrollbar.grid(row=2, column=1, sticky=(tk.N, tk.S))
 
+    def log(self, message, color="#d4d4d4"):
+        """输出日志到控制台"""
+        self.console.insert(tk.END, message + "\n")
+        self.console.see(tk.END)
+        self.root.update()
+
+    def log_backtest(self, position, message, color="#d4d4d4"):
+        """输出日志到指定名次的回测控制台"""
+        if position in self.backtest_consoles:
+            # 使用root.after确保在主线程更新GUI
+            self.root.after(0, lambda: self._update_backtest_console(position, message))
+
+    def _update_backtest_console(self, position, message):
+        """实际更新回测控制台的方法（在主线程执行）"""
+        if position in self.backtest_consoles:
+            self.backtest_consoles[position].insert(tk.END, message + "\n")
+            self.backtest_consoles[position].see(tk.END)
+
+    def update_history_display(self):
+        """更新历史记录显示"""
+        # 清空现有记录
+        for item in self.history_tree.get_children():
+            self.history_tree.delete(item)
+
+        # 获取最新数据验证结果
+        data = self.get_history_data()
+        if data:
+            for record in self.recommendation_history:
+                if record['result'] == 'waiting' and record['issue'] in data:
+                    actual_numbers = data[record['issue']]
+                    actual_num = actual_numbers[record['position'] - 1]
+                    record['actual'] = actual_num
+
+                    # 判断是否中奖（TOP7标准）
+                    top7_nums = record['numbers'][:7]
+                    if actual_num in top7_nums:
+                        rank = top7_nums.index(actual_num) + 1
+                        record['result'] = f'TOP{rank}'
+                    else:
+                        record['result'] = '未中'
+
+        # 统计数据
+        total = len(self.recommendation_history)
+        waiting = sum(1 for r in self.recommendation_history if r['result'] == 'waiting')
+        hit = sum(1 for r in self.recommendation_history if r['result'].startswith('TOP'))
+        miss = sum(1 for r in self.recommendation_history if r['result'] == '未中')
+
+        verified = total - waiting
+        hit_rate = (hit / verified * 100) if verified > 0 else 0
+
+        # 更新统计信息
+        self.history_stats_label.config(text=f"总数: {total} | 命中: {hit} | 未中: {miss} | 命中率: {hit_rate:.1f}%")
+
+        # 插入数据（倒序显示，最新的在上面）
+        for record in reversed(self.recommendation_history):
+            issue = record['issue']
+            position = f"第{record['position']}名"
+            # 显示完整的10个号码
+            all_nums = record['numbers']
+            numbers = ','.join(map(str, all_nums))
+            result = record['result']
+
+            # 根据结果设置标签
+            if result == 'waiting':
+                tag = 'waiting'
+                result_text = "[等待]"
+            elif result.startswith('TOP'):
+                tag = 'hit'
+                result_text = result
+            else:
+                tag = 'miss'
+                result_text = "[未中]"
+
+            self.history_tree.insert("", tk.END, values=(issue, position, numbers, result_text), tags=(tag,))
+
+    def clear_console(self):
+        """清空控制台"""
+        self.console.delete(1.0, tk.END)
+
+    def clear_backtest_console(self, position=None):
+        """清空回测控制台"""
+        if position is None:
+            # 清空所有回测控制台，并滚动到顶部（使用root.after确保在主线程执行）
+            self.root.after(0, self._clear_all_backtest_consoles)
+        elif position in self.backtest_consoles:
+            # 清空指定名次的回测控制台
+            self.root.after(0, lambda: self._clear_single_backtest_console(position))
+
+    def _clear_all_backtest_consoles(self):
+        """实际清空所有回测控制台的方法（在主线程执行）"""
+        for pos in self.backtest_consoles:
+            self.backtest_consoles[pos].delete(1.0, tk.END)
+            self.backtest_consoles[pos].yview_moveto(0)
+
+    def _clear_single_backtest_console(self, position):
+        """实际清空单个回测控制台的方法（在主线程执行）"""
+        if position in self.backtest_consoles:
+            self.backtest_consoles[position].delete(1.0, tk.END)
 
     def update_status(self, message):
         """更新状态标签"""
@@ -545,7 +503,6 @@ class PK10App(App):
             self.root.update()
         except:
             pass
-
 
     def preload_and_train(self):
         """后台预加载数据并训练所有10个名次的LSTM模型"""
@@ -589,7 +546,6 @@ class PK10App(App):
             traceback.print_exc()
             self.pretraining_in_progress = False
 
-
     def fetch_data(self):
         """获取数据（用于预加载）"""
         try:
@@ -597,7 +553,6 @@ class PK10App(App):
         except Exception as e:
             print(f"[错误] 数据获取失败: {e}")
             return None
-
 
     def refresh_preloaded_data(self):
         """后台刷新预���载数据"""
@@ -608,7 +563,6 @@ class PK10App(App):
                 print("[完成] 数据刷新完成")
         except:
             pass
-
 
     def start_prediction(self):
         """开始预测（在新线程中运行）"""
@@ -634,7 +588,6 @@ class PK10App(App):
         thread = threading.Thread(target=self.run_all_predictions)
         thread.daemon = True
         thread.start()
-
 
     def run_all_predictions(self):
         """预测所有1-10名次，并筛选连续未中奖的名次"""
@@ -1064,7 +1017,6 @@ class PK10App(App):
             self.run_button_history.config(state='normal')
             self.status_label.config(text="完成", foreground="green")
 
-
     def get_history_data(self):
         """获取历史数据，若不足500期则补充昨天所有数据"""
         from datetime import datetime, timedelta
@@ -1137,7 +1089,6 @@ class PK10App(App):
 
         sorted_items = sorted(result.items(), key=lambda x: x[0], reverse=True)
         return dict(sorted_items)
-
 
     def analyze_position(self, data, position):
         """分析指定位置的号码规律"""
@@ -1276,7 +1227,6 @@ class PK10App(App):
             'super_recent_limit': super_recent_limit
         }
 
-
     def extract_features(self, number, data, position):
         """提取单个号码的特征向量（用于ML模型）（带缓存优化）"""
         # 检查缓存
@@ -1376,7 +1326,6 @@ class PK10App(App):
             self.feature_cache[cache_key] = result
 
         return result
-
 
     def train_lstm_model(self, data, position, epochs=30, batch_size=32):
         """训练指定名次的LSTM模型（优化版）
@@ -1496,7 +1445,6 @@ class PK10App(App):
             print(f"[错误] 第{position}名LSTM训练失败: {e}")
             return None
 
-
     def predict_with_ml_model(self, data, position):
         """使用LSTM模型预测，返回每个号码的得分（0-100）（优化版）"""
         if not self.models_trained or position not in self.lstm_models:
@@ -1570,7 +1518,6 @@ class PK10App(App):
             traceback.print_exc()
             return None
 
-
     def ml_backtest(self, data, position):
         """LSTM深度学习回测（修复数据泄露问题）"""
         if not self.models_trained:
@@ -1643,7 +1590,6 @@ class PK10App(App):
             'total_periods': total_tests
         }
 
-
     def predict_position(self, data, position, use_dynamic_weights=True):
         """预测指定位置的号码 - 算法优化版
 
@@ -1692,7 +1638,6 @@ class PK10App(App):
         sorted_predictions = sorted(scores.items(), key=lambda x: x[1]['total'], reverse=True)
 
         return sorted_predictions, None  # 不返回analysis
-
 
     def validate_prediction_accuracy(self, data, position):
         """验证预测准确率：回测最近N期的预测效果 - 使用与推荐号码相同的多策略预测逻辑"""
@@ -1808,7 +1753,6 @@ class PK10App(App):
         }
 
 
-
     def fetch_latest_data(self):
         """获取最新数据"""
         try:
@@ -1828,7 +1772,6 @@ class PK10App(App):
         except Exception as e:
             return None
 
-
     def check_hit(self, predicted_top3, actual_num):
         """检查是否中奖 - TOP7以内精确显示排名"""
         if actual_num in predicted_top3:
@@ -1838,7 +1781,6 @@ class PK10App(App):
             else:
                 return False, "[错误] 未中TOP7"
         return False, "[错误] 未中"
-
 
     def find_top3_hit_positions(self, data, all_predictions, all_backtests, latest_issue):
         """找出最新一期TOP3中奖的名次"""
@@ -1885,7 +1827,6 @@ class PK10App(App):
 
         return top3_hit_positions
 
-
     def select_best_from_top3_hits(self, top3_hit_positions, all_backtests):
         """从TOP3中奖的名次中选择历史准确率最高的 - 简化版"""
         if not top3_hit_positions:
@@ -1908,11 +1849,9 @@ class PK10App(App):
 
         return best_position
 
-
     def select_best_position_advanced(self, data, all_predictions, all_backtests):
         """高级推荐名次选择 - V3优化版：直接调用自适应方法"""
         return self.select_best_position_adaptive(data, all_predictions, all_backtests)
-
 
     def calculate_recent_performance(self, backtest, periods=5):
         """计算最近N期的表现得分（满分30）"""
@@ -1948,7 +1887,6 @@ class PK10App(App):
         score = (hit_count / max_possible) * 30 if max_possible > 0 else 0
 
         return score
-
 
     def display_backtest_details(self, data, top3_hit_positions, all_predictions, all_backtests, next_issue):
         """显示所有名次的回测详情"""
@@ -2027,12 +1965,10 @@ class PK10App(App):
 
     # ==================== 高级功能实现 ====================
 
-
     def show_recommendation_history(self):
         """显示推荐历史记录"""
         # 直接在主线程中打开悬浮窗口，不使用run_advanced_function
         threading.Thread(target=self.display_recommendation_history, daemon=True).start()
-
 
     def retrain_all_models(self):
         """重新训练所有LSTM模型"""
@@ -2056,7 +1992,6 @@ class PK10App(App):
             self.all_positions_predictions = {}
             self.backtest_results = None
             threading.Thread(target=self.preload_and_train, daemon=True).start()
-
 
     def delete_all_models(self):
         """删除所有已保存的LSTM模型"""
@@ -2101,7 +2036,6 @@ class PK10App(App):
             except Exception as e:
                 messagebox.showerror("错误", f"删除模型文件时出错：\n{str(e)}")
                 self.update_status(f"删除模型失败: {str(e)}")
-
 
     def display_recommendation_history(self):
         """显示推荐历史记录详情 - 弹出悬浮窗口"""
@@ -2234,12 +2168,10 @@ class PK10App(App):
         ttk.Button(button_frame, text="关闭", command=history_window.destroy).pack(side=tk.RIGHT)
         ttk.Label(button_frame, text="提示: 此窗口不影响主界面操作", foreground="gray").pack(side=tk.LEFT)
 
-
     def run_advanced_function(self, func, status_text):
         """运行高级功能的通用方法"""
         self.status_label.config(text=status_text, foreground="orange")
         self.progress.start(10)
-
 
         def wrapper():
             try:
@@ -2253,7 +2185,6 @@ class PK10App(App):
         thread.start()
 
     # ==================== V3优化：新增预测方法 ====================
-
 
     def select_best_position_adaptive(self, data, all_predictions, all_backtests):
         """
@@ -2323,7 +2254,6 @@ class PK10App(App):
         self.last_recommended_position = best_pos
 
         return best_pos, reason, position_scores, market_state
-
 
     def analyze_market_state(self, data, all_backtests):
         """分析当前市场状态"""
@@ -2406,7 +2336,6 @@ class PK10App(App):
             'avg_hit_count': avg_hit_count
         }
 
-
     def calculate_stability_score_enhanced(self, backtest):
         """增强的稳定性得分"""
 
@@ -2437,7 +2366,6 @@ class PK10App(App):
         total_stability = rank_score + std_score + frequency_stability
 
         return total_stability
-
 
     def calculate_position_cold_rebound(self, backtest):
         """计算名次的冷号回补潜力"""
@@ -2476,7 +2404,6 @@ class PK10App(App):
 
         return rebound_score
 
-
     def calculate_hot_decay_penalty(self, backtest):
         """计算热门名次的衰减惩罚"""
 
@@ -2514,7 +2441,6 @@ class PK10App(App):
         return penalty
 
     # ==================== 高信心推荐系统：新增功能 ====================
-
 
     def calculate_lstm_confidence(self, data, position):
         """
@@ -2584,7 +2510,6 @@ class PK10App(App):
             print(f"[警告] LSTM置信度计算失败: {e}")
             return 0.5  # 出错时返回中等置信度
 
-
     def calculate_recommendation_score(self, data, position, backtest, all_predictions):
         """
         计算综合推荐得分（0-100分）
@@ -2643,7 +2568,6 @@ class PK10App(App):
 
         return total_score, score_details
 
-
     def calculate_consecutive_miss_penalty(self, backtest):
         """
         计算连续失败惩罚
@@ -2676,7 +2600,6 @@ class PK10App(App):
         else:
             return 0
 
-
     def get_confidence_level(self, total_score, lstm_confidence, accuracy_rate):
         """
         判断信心等级（1-5星）
@@ -2701,7 +2624,6 @@ class PK10App(App):
         else:
             return 1, "⭐", "建议观望", "<45%"
 
-
     def _get_strategy_display_name(self, strategy_type):
         """获取策略类型的显示名称"""
         strategy_names = {
@@ -2711,7 +2633,6 @@ class PK10App(App):
             'reversal': '反转期策略'
         }
         return strategy_names.get(strategy_type, '未知策略')
-
 
     def _get_recent_2_performance(self, backtest):
         """获取近1期表现信息"""
@@ -2723,7 +2644,6 @@ class PK10App(App):
         recent_1 = history[0]
         hit_count = recent_1
         return f"{hit_count}/1 中奖"
-
 
     def _check_model_agreement(self, predictions):
         """检查3个模型对TOP3预测是否一致
@@ -2756,7 +2676,6 @@ class PK10App(App):
 
         # 如果TOP3中至少有2个号码是3个模型都同意的，认为模型一致
         return agreement_count >= 2
-
 
     def validate_model_reliability(self, data, position):
         """优化版：交叉验证 + 趋势分析 + 数据分布检测
@@ -2842,7 +2761,6 @@ class PK10App(App):
             traceback.print_exc()
             return self._create_error_result(f'验证失败: {str(e)}')
 
-
     def _create_error_result(self, reason):
         """创建错误结果"""
         return {
@@ -2858,7 +2776,6 @@ class PK10App(App):
             'distribution': '未知',
             'distribution_p_value': 1.0
         }
-
 
     def _cross_validation_top8(self, data, position, k_folds=5, periods=50):
         """K折交叉验证（使用多策略预测TOP8）
@@ -2950,7 +2867,6 @@ class PK10App(App):
             'n_samples': all_total
         }
 
-
     def _analyze_trend_with_regression(self, data, position, periods=10):
         """使用线性回归分析趋势
 
@@ -3035,7 +2951,6 @@ class PK10App(App):
                 'is_significant': False
             }
 
-
     def _check_distribution_with_chi2(self, data, position):
         """使用标准卡方检验检测数据分布稳定性
 
@@ -3109,7 +3024,6 @@ class PK10App(App):
                 'p_value': 1.0,
                 'is_stable': False
             }
-
 
     def _make_recommendation_decision(self, cv_accuracy, cv_is_significant, cv_p_value,
                                      trend, trend_is_significant,
@@ -3215,7 +3129,6 @@ class PK10App(App):
 
         return hits / periods if periods > 0 else 0
 
-
     def generate_recommendation_reason_high_confidence(self, best_pos, best_info,
                                                        all_scores, market_state):
         """
@@ -3250,7 +3163,6 @@ class PK10App(App):
 
     # ========== 新增：动态多策略预测系统 ==========
 
-
     def predict_with_hot_strategy(self, data, position):
         """
         策略1：热号追踪策略
@@ -3279,7 +3191,6 @@ class PK10App(App):
             scores[num] = score
 
         return scores
-
 
     def predict_with_cold_strategy(self, data, position):
         """
@@ -3324,7 +3235,6 @@ class PK10App(App):
 
         return scores
 
-
     def predict_with_cycle_strategy(self, data, position):
         """
         策略3：周期规律策略
@@ -3368,7 +3278,6 @@ class PK10App(App):
 
         return scores
 
-
     def predict_with_rf_strategy(self, data, position):
         """
         策略4：随机森林策略（使用已训练的RF模型）
@@ -3385,7 +3294,6 @@ class PK10App(App):
             return ml_scores
         else:
             return {num: 50 for num in range(1, 11)}
-
 
     def detect_market_state(self, data, position):
         """
@@ -3413,7 +3321,6 @@ class PK10App(App):
             return 'VOLATILE'
         else:
             return 'STABLE'
-
 
     def calculate_strategy_weights_dynamic(self, data, position):
         """
@@ -3462,7 +3369,6 @@ class PK10App(App):
             }
 
         return weights, market_state
-
 
     def generate_top8_multi_strategy(self, data, position):
         """
@@ -3528,7 +3434,6 @@ class PK10App(App):
 
         return top8, final_scores, market_state, weights
 
-
     def backtest_top8_rate(self, data, position, periods=30):
         """
         回测TOP8命中率
@@ -3559,7 +3464,6 @@ class PK10App(App):
             total += 1
 
         return hits / total if total > 0 else 0
-
 
     def backtest_top8_detailed(self, data, position, periods=30):
         """
@@ -3595,7 +3499,6 @@ class PK10App(App):
 
         return hits, total
 
-
     def check_consecutive_miss(self, data, position, periods=5):
         """
         检查最近N期连续未中次数
@@ -3629,7 +3532,6 @@ class PK10App(App):
 
         return consecutive
 
-
     def calculate_position_stability(self, data, position):
         """
         计算名次的稳定性（熵值）- 保留原版本用于兼容
@@ -3648,7 +3550,6 @@ class PK10App(App):
         stability = 1 - (entropy / max_entropy)
 
         return stability
-
 
     def calculate_position_stability_v2(self, data, position):
         """
@@ -3699,7 +3600,6 @@ class PK10App(App):
         )
 
         return stability
-
 
     def select_best_position_for_top8(self, data, all_predictions):
         """
@@ -3844,7 +3744,6 @@ class PK10App(App):
 
         return best_position, position_scores
 
-
     def check_consecutive_miss_count(self, position, backtest):
         """检查某名次连续未中次数"""
         backtest_details = backtest.get('backtest_details', [])
@@ -3857,7 +3756,6 @@ class PK10App(App):
             else:
                 break  # 遇到中奖就停止
         return consecutive
-
 
     def find_hottest_position_recent_5(self, all_backtests):
         """找到近5期命中率最高的名次"""
@@ -3880,7 +3778,6 @@ class PK10App(App):
                 best_position = position
 
         return best_position
-
 
     def count_consecutive_miss(self):
         """统计推荐历史中连续未中的次数"""
@@ -3913,7 +3810,6 @@ class PK10App(App):
 
         return consecutive
 
-
     def get_blacklist_positions(self):
         """获取最近2期推荐过且未中的名次（黑名单）"""
         blacklist = set()
@@ -3940,7 +3836,6 @@ class PK10App(App):
                 blacklist.add(record['position'])
 
         return blacklist
-
 
     def select_guaranteed_hit_position(self, all_backtests):
         """
@@ -4007,7 +3902,6 @@ class PK10App(App):
 
         return best_position, 0, best_rate
 
-
     def select_position_with_rotation(self, all_backtests, blacklist):
         """
         轮换策略：选择从未推荐过或很久没推荐的高命中率名次
@@ -4065,7 +3959,6 @@ class PK10App(App):
         # 兜底：返回命中率最高的
         return self.select_ultra_stable_position_exclude_blacklist(all_backtests, blacklist)
 
-
     def _get_best_position_by_period(self, all_backtests, period, blacklist):
         """获取指定周期内命中率最高的名次"""
         best_pos = None
@@ -4090,7 +3983,6 @@ class PK10App(App):
                 best_pos = position
 
         return best_pos
-
 
     def _get_most_stable_position(self, all_backtests, blacklist):
         """获取稳定性最好的名次（命中率方差最小）"""
@@ -4120,7 +4012,6 @@ class PK10App(App):
                 best_pos = position
 
         return best_pos
-
 
     def _get_best_trending_position(self, all_backtests, blacklist):
         """获取上升趋势最强的名次"""
@@ -4154,7 +4045,6 @@ class PK10App(App):
                 best_pos = position
 
         return best_pos
-
 
     def select_position_by_ensemble_voting(self, all_backtests, blacklist):
         """
@@ -4202,7 +4092,6 @@ class PK10App(App):
 
         return best_position
 
-
     def select_ultra_stable_position_exclude_blacklist(self, all_backtests, blacklist):
         """选择超稳定名次，排除黑名单（近20期命中率最高）"""
         best_position = 1
@@ -4237,7 +4126,6 @@ class PK10App(App):
                 best_position = position
 
         return best_position, best_rate
-
 
     def select_second_ultra_stable_position(self, all_backtests, blacklist, exclude_position):
         """选择第二超稳定名次（排除黑名单和已选名次）"""
@@ -4275,7 +4163,6 @@ class PK10App(App):
             return position_rates[0][0], position_rates[0][1]
         else:
             return 1, 0.5
-
 
     def select_best_position_with_fallback(self, data, all_predictions, all_backtests):
         """智能追号：四级防连败机制（确保不连败3次）
@@ -4434,7 +4321,6 @@ class PK10App(App):
             return best_position, backup_position, fallback_reason, position_scores
 
 
-
 def main():
     root = tk.Tk()
     app = PredictionApp(root)
@@ -4443,7 +4329,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-if __name__ == '__main__':
-    PK10App().run()
