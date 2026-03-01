@@ -69,15 +69,18 @@ jobs:
 
     - name: Build APK
       run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
-        export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
-        buildozer android debug
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          export ANDROID_HOME=$HOME/android-sdk
+          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+          export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
+          export PATH=$ANDROID_SDK_ROOT/build-tools/31.0.0:$PATH
+          buildozer -v android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: pk10-predictor-apk
         path: bin/*.apk
+
 
 
