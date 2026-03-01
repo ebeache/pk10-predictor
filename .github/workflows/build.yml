@@ -41,25 +41,31 @@ jobs:
 
     - name: Setup Android SDK
       run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        mkdir -p $ANDROID_SDK_ROOT
-        cd $ANDROID_SDK_ROOT
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          mkdir -p $ANDROID_SDK_ROOT
+          cd $ANDROID_SDK_ROOT
 
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
 
-        export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
 
-        yes | sdkmanager --licenses || true
+          yes | sdkmanager --licenses || true
 
-        sdkmanager "platform-tools"
-        sdkmanager "platforms;android-31"
-        sdkmanager "build-tools;31.0.0"
-        sdkmanager "ndk;25.2.9519653"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-31"
+          sdkmanager "build-tools;31.0.0"
 
-        ls -la $ANDROID_SDK_ROOT/build-tools/
+          # 下载NDK r21e (支持gcc/gfortran，numpy/scipy需要)
+          cd $ANDROID_SDK_ROOT
+          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          mv android-ndk-r21e ndk-r21e
+
+          ls -la $ANDROID_SDK_ROOT/build-tools/
+          ls -la $ANDROID_SDK_ROOT/ndk-r21e/
 
     - name: Install Buildozer
       run: |
@@ -81,6 +87,7 @@ jobs:
       with:
         name: pk10-predictor-apk
         path: bin/*.apk
+
 
 
 
