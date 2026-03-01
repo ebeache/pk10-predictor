@@ -1,41 +1,39 @@
-  name: Build Android APK
+name: Build Android APK
 
-  on:
-    push:
-      branches: [ main, master ]
-    workflow_dispatch:
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
 
-  jobs:
-    build:
-      runs-on: ubuntu-latest
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-      steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk git zip unzip autoconf libtool
-  pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake
-  libffi-dev libssl-dev build-essential
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openjdk-17-jdk git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev build-essential
 
-      - name: Install Buildozer
-        run: |
-          pip install --upgrade pip
-          pip install buildozer cython==0.29.33
+    - name: Install Buildozer
+      run: |
+        pip install --upgrade pip
+        pip install buildozer cython==0.29.33
 
-      - name: Build APK
-        run: |
-          buildozer -v android debug
+    - name: Build APK
+      run: |
+        buildozer -v android debug
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: pk10-predictor-apk
-          path: bin/*.apk
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: pk10-predictor-apk
+        path: bin/*.apk
