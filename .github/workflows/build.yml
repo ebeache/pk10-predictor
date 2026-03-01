@@ -21,51 +21,28 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          git \
-          zip \
-          unzip \
-          openjdk-17-jdk \
-          autoconf \
-          libtool \
-          pkg-config \
-          zlib1g-dev \
-          libncurses5-dev \
-          libncursesw5-dev \
-          cmake \
-          libffi-dev \
-          libssl-dev \
-          automake \
-          ccache
+        sudo apt-get install -y build-essential git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev automake ccache
 
     - name: Setup Android SDK
       run: |
-          export ANDROID_SDK_ROOT=$HOME/android-sdk
-          mkdir -p $ANDROID_SDK_ROOT
-          cd $ANDROID_SDK_ROOT
-
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-
-          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
-
-          yes | sdkmanager --licenses || true
-
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-31"
-          sdkmanager "build-tools;31.0.0"
-
-          # 下载NDK r21e (支持gcc/gfortran，numpy/scipy需要)
-          cd $ANDROID_SDK_ROOT
-          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
-          unzip -q android-ndk-r21e-linux-x86_64.zip
-          mv android-ndk-r21e ndk-r21e
-
-          ls -la $ANDROID_SDK_ROOT/build-tools/
-          ls -la $ANDROID_SDK_ROOT/ndk-r21e/
+        export ANDROID_SDK_ROOT=$HOME/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT
+        cd $ANDROID_SDK_ROOT
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+        export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+        yes | sdkmanager --licenses || true
+        sdkmanager "platform-tools"
+        sdkmanager "platforms;android-31"
+        sdkmanager "build-tools;31.0.0"
+        cd $ANDROID_SDK_ROOT
+        wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+        unzip -q android-ndk-r21e-linux-x86_64.zip
+        mv android-ndk-r21e ndk-r21e
+        ls -la $ANDROID_SDK_ROOT/build-tools/
+        ls -la $ANDROID_SDK_ROOT/ndk-r21e/
 
     - name: Install Buildozer
       run: |
@@ -75,21 +52,16 @@ jobs:
 
     - name: Build APK
       run: |
-          export ANDROID_SDK_ROOT=$HOME/android-sdk
-          export ANDROID_HOME=$HOME/android-sdk
-          export LEGACY_NDK=$HOME/android-sdk/ndk-r21e
-          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
-          export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
-          export PATH=$ANDROID_SDK_ROOT/build-tools/31.0.0:$PATH
-          buildozer -v android debug 2>&1 | tee build.log || (tail -500 build.log
+        export ANDROID_SDK_ROOT=$HOME/android-sdk
+        export ANDROID_HOME=$HOME/android-sdk
+        export LEGACY_NDK=$HOME/android-sdk/ndk-r21e
+        export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+        export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
+        export PATH=$ANDROID_SDK_ROOT/build-tools/31.0.0:$PATH
+        buildozer -v android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: pk10-predictor-apk
         path: bin/*.apk
-
-
-
-
-
